@@ -138,6 +138,7 @@ def main(argv=None):
     ap.add_argument("--grid", default="3x3", help="object-init grid, e.g. 3x3")
     ap.add_argument("--max-cells", type=int, default=None, help="cap number of (config x pose) cells")
     ap.add_argument("--max-steps", type=int, default=80)
+    ap.add_argument("--shard", default=None, help="round-robin shard 'i/n' for multi-GPU runs")
     args = ap.parse_args(argv)
 
     gx, gy = (int(v) for v in args.grid.lower().split("x"))
@@ -156,6 +157,12 @@ def main(argv=None):
              for cfg in BASE_CONFIGS for (pose_name, pose_kwargs) in POSES]
     if args.max_cells:
         cells = cells[: args.max_cells]
+    # round-robin shard so each GPU gets a balanced mix of cells
+    shard_tag = ""
+    if args.shard:
+        si, sn = (int(x) for x in args.shard.split("/"))
+        cells = cells[si::sn]
+        shard_tag = f"s{si}_"  # keep episode_id globally unique across shards
 
     ep = 0
     n_success = 0
@@ -173,7 +180,7 @@ def main(argv=None):
         with open(out, "a") as fh:
             for ox in obj_xs:
                 for oy in obj_ys:
-                    rec = run_episode(env, model, f"ep_{ep:05d}", conditions,
+                    rec = run_episode(env, model, f"ep_{shard_tag}{ep:05d}", conditions,
                                       args.max_steps, (float(ox), float(oy)))
                     fh.write(json.dumps(rec) + "\n")
                     fh.flush()
