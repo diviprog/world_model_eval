@@ -13,6 +13,7 @@ dependencies = [
 # Keep these separate so `diagnostics/` stays installable anywhere.
 dev = [
     "pytest>=7.0",
+    "matplotlib>=3.6",  # for diagnostics.figure (the outreach artifact)
 ]
 
 [project.scripts]
