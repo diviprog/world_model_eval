@@ -14,6 +14,9 @@ venv/
 # Data / rollout artifacts
 data/*.jsonl
 *.mp4
+# ...but keep the two curated demo clips referenced in the README
+!results/videos/rt1_cabinet2_success.mp4
+!results/videos/rt1_vertical_fail.mp4
 
 # OS / editor
 .DS_Store

@@ -27,12 +27,25 @@ The scalar — **47% success** — hides everything the decomposition surfaces:
 
 Actionable readout: *collect grasp-phase demonstrations on the cabinet2-style table surface and for vertically-oriented cans.* The full report is in [`results/report.md`](results/report.md).
 
+## The policy in action
+
+The diagnostic says failures concentrate at the **grasp** phase. Here it is on two rollouts — the policy reaches the can fine in both, and the outcome turns on whether it closes a stable grasp:
+
+| ✅ Success | ❌ Failure — grasp phase |
+|---|---|
+| ![success](results/videos/rt1_cabinet2_success.gif) | ![failure](results/videos/rt1_vertical_fail.gif) |
+| Clean reach → grasp → lift. | Reaches the can, but the grasp never holds — exactly the phase the report flags. |
+
+Full clips: [`rt1_cabinet2_success.mp4`](results/videos/rt1_cabinet2_success.mp4) · [`rt1_vertical_fail.mp4`](results/videos/rt1_vertical_fail.mp4)
+
 ## How it's built
 
 One seam matters: the line between the simulator harness and the diagnostic layer.
 
 - **`runner/`** talks to SimplerEnv, runs the variant sweep, and emits one JSONL record per episode. Depends on the sim, a GPU, and finicky rendering libs.
 - **`diagnostics/`** reads those records and produces the analysis. Depends on nothing but pandas and the standard library, and never imports SimplerEnv.
+
+Each record's provenance is deliberate: the **condition labels are injected** from the sweep driver (the sim doesn't expose the active variant cleanly, so the runner stamps in what it knows it's running), the **end-effector trajectory is accumulated** per step during the rollout, and **success comes from the simulator's own ground-truth** episode stats — not a heuristic. The failure-phase labels are then derived from generic `grasped` / `lifted` outcome signals, so the diagnostics never depend on anything sim-specific.
 
 They communicate only through JSONL rollout records on disk. That keeps the diagnostic layer — the differentiated part — policy- and source-agnostic: the same code would run on records from a different simulator, real hardware logs, or a learned world model. It's developed and unit-tested against synthetic fixtures with a *planted* failure pattern, so the whole analysis path is proven to recover a known answer before any real rollout exists.
 
