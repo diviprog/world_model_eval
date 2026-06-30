@@ -20,13 +20,13 @@ Robot policy training today is closer to trial-and-error than to engineering. Te
 
 ## Stack
 
-- **Policies:** Octo-Base (dev), OpenVLA-7B (headline runs)
-- **Sim:** SimplerEnv (Google Robot setup, visual matching + variant aggregation)
+- **Policies:** Octo-Base (dev), OpenVLA-7B (optional headline run)
+- **Sim / harness:** SimplerEnv via the [`DelinQu/SimplerEnv-OpenVLA`](https://github.com/DelinQu/SimplerEnv-OpenVLA) fork, which runs both Octo and OpenVLA from one harness (Google Robot setup, visual matching + variant aggregation). The base `simpler-env/SimplerEnv` repo supports RT-1 and Octo only; OpenVLA lives in this fork.
 - **Diagnostic layer:** pure Python, no sim or GPU dependency, operates on rollout records
 
 ## Status
 
-In progress. See `BUILD_PLAN.md` for the staged plan and `SCOPE.md` for what is and isn't in scope.
+In progress.
 
 ## Layout
 
@@ -36,5 +36,3 @@ diagnostics/   failure tagging, pattern surfacing, report generation
 data/          JSONL rollout records
 notebooks/     exploration
 ```
-
-See `ARCHITECTURE.md` for the design and the record schema.

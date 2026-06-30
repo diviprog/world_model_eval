@@ -1,0 +1,20 @@
+# Local planning docs — kept on disk as build reference, never published
+ARCHITECTURE.md
+BUILD_PLAN.md
+SCOPE.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Data / rollout artifacts
+data/*.jsonl
+*.mp4
+
+# OS / editor
+.DS_Store
+.ipynb_checkpoints/
