@@ -160,6 +160,9 @@ def records_to_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
             "success": r["success"],
             "episode_length": r["episode_length"],
             "trajectory": r["trajectory"],
+            # Optional source-provided outcome stats (absent for synthetic
+            # fixtures); features.py reads these as generic phase signals.
+            "episode_stats": r.get("episode_stats"),
         }
         for ax in CONDITION_AXES:
             row[ax] = r["conditions"].get(ax)
