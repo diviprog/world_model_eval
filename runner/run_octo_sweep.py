@@ -86,12 +86,16 @@ def run_episode(env, model, episode_id, conditions, max_steps, obj_xy):
         },
         "obj_init_options": {"init_xy": np.array(obj_xy)},
     }
+    # simpler_env-specific methods live on the unwrapped env (gymnasium no
+    # longer forwards attributes through the TimeLimit wrapper); reset/step stay
+    # on the wrapper so TimeLimit truncation still fires.
+    base = env.unwrapped
     obs, _ = env.reset(options=reset_opts)
-    is_final_subtask = env.is_final_subtask()
-    instr = env.get_language_instruction()
+    is_final_subtask = base.is_final_subtask()
+    instr = base.get_language_instruction()
     model.reset(instr)
 
-    image = get_image_from_maniskill2_obs_dict(env, obs)
+    image = get_image_from_maniskill2_obs_dict(base, obs)
     ee_xyz, gripper = [], []
     predicted_terminated = truncated = False
     success = False
@@ -101,16 +105,16 @@ def run_episode(env, model, episode_id, conditions, max_steps, obj_xy):
         predicted_terminated = bool(action["terminate_episode"][0] > 0)
         if predicted_terminated and not is_final_subtask:
             predicted_terminated = False
-            env.advance_to_next_subtask()
+            base.advance_to_next_subtask()
         obs, reward, done, truncated, info = env.step(
             np.concatenate([action["world_vector"], action["rot_axangle"], action["gripper"]])
         )
         success = success or bool(done)
-        is_final_subtask = env.is_final_subtask()
+        is_final_subtask = base.is_final_subtask()
         # log: end-effector xyz from tcp_pose, binarized commanded gripper
         ee_xyz.append([float(c) for c in np.asarray(obs["extra"]["tcp_pose"])[:3]])
         gripper.append(int(float(np.asarray(action["gripper"]).reshape(-1)[0]) > 0))
-        image = get_image_from_maniskill2_obs_dict(env, obs)
+        image = get_image_from_maniskill2_obs_dict(base, obs)
         steps += 1
 
     stats = {k: (bool(v) if isinstance(v, (bool, np.bool_)) else float(v))
