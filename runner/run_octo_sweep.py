@@ -23,13 +23,32 @@ from pathlib import Path
 
 import numpy as np
 
-# SimplerEnv (sim side) — the only file that imports it.
+# SimplerEnv (sim side) — the only file that imports it. Policy classes are
+# imported lazily in build_model so the JAX (Octo) and TF (RT-1) stacks only load
+# when actually used.
 from simpler_env.utils.env.env_builder import build_maniskill2_env, get_robot_control_mode
 from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
-from simpler_env.policies.octo.octo_model import OctoInference
 
 TASK = "google_robot_pick_coke_can"
 ROBOT = "google_robot_static"
+
+# Policy label written into each record's `policy` field.
+POLICY_LABELS = {"octo-base": "octo-base", "rt1": "rt-1-x"}
+
+
+def build_model(policy: str, ckpt: str | None):
+    """Construct the inference policy. Both expose reset()/step() with identical
+    action-dict keys, so the rollout loop is policy-agnostic."""
+    if policy == "octo-base":
+        from simpler_env.policies.octo.octo_model import OctoInference
+        return OctoInference(model_type="octo-base", policy_setup="google_robot",
+                             init_rng=0, action_scale=1.0)
+    if policy == "rt1":
+        from simpler_env.policies.rt1.rt1_model import RT1Inference
+        assert ckpt, "rt1 requires --ckpt (path to the RT-1 SavedModel dir)"
+        return RT1Inference(saved_model_path=ckpt, policy_setup="google_robot",
+                            action_scale=1.0)
+    raise ValueError(f"unknown policy {policy!r}")
 
 # Object pose variants (the coke_can_option flags) -> our object_pose label.
 POSES = [
@@ -77,7 +96,7 @@ OBJ_X_RANGE = (-0.35, -0.12)
 OBJ_Y_RANGE = (-0.02, 0.42)
 
 
-def run_episode(env, model, episode_id, conditions, max_steps, obj_xy):
+def run_episode(env, model, episode_id, conditions, max_steps, obj_xy, policy_label):
     """Mirror of the evaluator per-episode loop, with trajectory logging."""
     reset_opts = {
         "robot_init_options": {
@@ -121,7 +140,7 @@ def run_episode(env, model, episode_id, conditions, max_steps, obj_xy):
              for k, v in dict(info.get("episode_stats", {})).items()}
     return {
         "episode_id": episode_id,
-        "policy": "octo-base",
+        "policy": policy_label,
         "task": TASK,
         "eval_mode": "variant_aggregation",
         "conditions": conditions,
@@ -135,6 +154,8 @@ def run_episode(env, model, episode_id, conditions, max_steps, obj_xy):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="data/rollouts.jsonl")
+    ap.add_argument("--policy", default="octo-base", choices=["octo-base", "rt1"])
+    ap.add_argument("--ckpt", default=None, help="checkpoint dir (required for rt1)")
     ap.add_argument("--grid", default="3x3", help="object-init grid, e.g. 3x3")
     ap.add_argument("--max-cells", type=int, default=None, help="cap number of (config x pose) cells")
     ap.add_argument("--max-steps", type=int, default=80)
@@ -150,8 +171,9 @@ def main(argv=None):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("")  # truncate
 
-    print("loading Octo-Base...", flush=True)
-    model = OctoInference(model_type="octo-base", policy_setup="google_robot", init_rng=0, action_scale=1.0)
+    policy_label = POLICY_LABELS[args.policy]
+    print(f"loading policy {args.policy} ({policy_label})...", flush=True)
+    model = build_model(args.policy, args.ckpt)
 
     cells = [(cfg, pose_name, pose_kwargs)
              for cfg in BASE_CONFIGS for (pose_name, pose_kwargs) in POSES]
@@ -181,7 +203,7 @@ def main(argv=None):
             for ox in obj_xs:
                 for oy in obj_ys:
                     rec = run_episode(env, model, f"ep_{shard_tag}{ep:05d}", conditions,
-                                      args.max_steps, (float(ox), float(oy)))
+                                      args.max_steps, (float(ox), float(oy)), policy_label)
                     fh.write(json.dumps(rec) + "\n")
                     fh.flush()
                     n_success += int(rec["success"])
