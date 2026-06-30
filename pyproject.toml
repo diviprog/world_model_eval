@@ -1,0 +1,29 @@
+[project]
+name = "robot-eval-diagnostics"
+version = "0.1.0"
+description = "A failure-mode diagnostic layer for robot manipulation policies."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+# The runner talks to SimplerEnv and needs a GPU; the diagnostics layer does not.
+# Keep these separate so `diagnostics/` stays installable anywhere.
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+robot-eval-report = "diagnostics.report:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["diagnostics", "runner"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
