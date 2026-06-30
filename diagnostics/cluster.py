@@ -63,17 +63,23 @@ def top_failure_clusters(
     min_fail: int = 8,
     k: int = 5,
 ) -> pd.DataFrame:
-    """Rank joint (conditions x failure_phase) cells by failure volume.
+    """Surface the condition clusters that fail the most *above baseline*.
 
-    Enumerates every combination of ``n_axes`` condition columns, groups by
-    those columns plus ``failure_phase``, and ranks the resulting cells by the
-    number of failures they contain (volume), with failure rate as a tiebreak.
-    Cells below ``min_support`` episodes or ``min_fail`` failures are dropped so
-    we don't report noise.
+    Enumerates every combination of ``n_axes`` condition columns and groups by
+    those columns. Each cell is scored by **failure excess** — how many more
+    episodes failed than the overall failure rate would predict
+    (``n_fail - n_total * overall_failure_rate``). This balances volume against
+    severity: a small cell that fails 93% of the time and a large cell that fails
+    well above average both rank highly, while a large cell that fails *below*
+    average (e.g. the default setup) is correctly pushed down.
 
-    Returns one row per surfaced cluster with: the axis columns, their values,
-    ``failure_phase``, ``n_total`` (episodes in the cell), ``n_fail``, and
-    ``fail_rate``.
+    Phase is not part of the grouping key — instead each surfaced cluster is
+    annotated with the **dominant failure phase among its failures**, which reads
+    as "these conditions fail X% of the time, mostly at the <phase> phase."
+
+    Cells below ``min_support`` episodes or ``min_fail`` failures are dropped.
+    Returns one row per cluster with the axis columns + values, ``failure_phase``
+    (dominant), ``n_total``, ``n_fail``, ``fail_rate``, and ``excess``.
     """
     if "failure_phase" not in df.columns:
         raise KeyError(
@@ -81,42 +87,38 @@ def top_failure_clusters(
         )
 
     df = df.assign(failure=~df["success"])
+    overall_fail = float(df["failure"].mean())
     rows: list[dict] = []
 
     for cols in combinations(condition_cols, n_axes):
-        keys = list(cols) + ["failure_phase"]
-        # Group every episode by (conditions + the phase it broke in). For
-        # successes failure_phase is "none", which we exclude below.
-        grp = df.groupby(keys, dropna=False).agg(
-            n_fail=("failure", "sum"), n_phase=("failure", "size")
+        grp = df.groupby(list(cols), dropna=False).agg(
+            n_total=("failure", "size"), n_fail=("failure", "sum")
         )
-        # Episodes in the cell ignoring phase = support for those conditions.
-        support = df.groupby(list(cols), dropna=False).size()
-
         for idx, r in grp.iterrows():
             idx_t = idx if isinstance(idx, tuple) else (idx,)
-            *cond_vals, phase = idx_t
-            if phase == "none":
-                continue
-            n_fail = int(r["n_fail"])
-            n_total = int(support.loc[tuple(cond_vals) if len(cond_vals) > 1 else cond_vals[0]])
+            n_total, n_fail = int(r["n_total"]), int(r["n_fail"])
             if n_total < min_support or n_fail < min_fail:
                 continue
-            row = {col: val for col, val in zip(cols, cond_vals)}
-            row["failure_phase"] = phase
+            # dominant failure phase among this cell's failures
+            mask = pd.Series(True, index=df.index)
+            for c, v in zip(cols, idx_t):
+                mask &= df[c] == v
+            phases = df.loc[mask & df["failure"], "failure_phase"]
+            dom_phase = phases.mode().iat[0] if len(phases) else "n/a"
+            row = {col: val for col, val in zip(cols, idx_t)}
+            row["failure_phase"] = dom_phase
             row["n_total"] = n_total
             row["n_fail"] = n_fail
             row["fail_rate"] = n_fail / n_total
+            row["excess"] = n_fail - n_total * overall_fail
             row["_axes"] = cols
             rows.append(row)
 
     if not rows:
         return pd.DataFrame(
-            columns=["failure_phase", "n_total", "n_fail", "fail_rate"]
+            columns=["failure_phase", "n_total", "n_fail", "fail_rate", "excess"]
         )
 
     out = pd.DataFrame(rows)
-    out = out.sort_values(
-        ["n_fail", "fail_rate"], ascending=False
-    ).reset_index(drop=True)
+    out = out.sort_values(["excess", "fail_rate"], ascending=False).reset_index(drop=True)
     return out.head(k)

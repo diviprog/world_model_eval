@@ -113,7 +113,7 @@ def generate_report(df: pd.DataFrame) -> str:
             cond = _describe_conditions(row, axes)
             lines.append(
                 f"{i}. **{cond} → {row['failure_phase']}** "
-                f"({row['fail_rate']:.0%} failure, {int(row['n_fail'])} episodes)"
+                f"({row['fail_rate']:.0%} failure, {int(row['n_fail'])}/{int(row['n_total'])} episodes)"
             )
         lines.append("")
         lines.append("### Recommendation")
